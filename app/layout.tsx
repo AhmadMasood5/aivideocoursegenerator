@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import {  DM_Sans} from "next/font/google";
 import "./globals.css";
+import {
+  ClerkProvider,
+ 
+} from '@clerk/nextjs'
+import { Provider } from "@radix-ui/react-tooltip";
 
 const AppFont = DM_Sans({
   subsets: ["latin"],
@@ -17,12 +22,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <ClerkProvider>
+      <html lang="en">
       <body
         className={AppFont.className}
       >
-        {children}
+        <Provider>
+          {children}
+        </Provider>
       </body>
     </html>
+    </ClerkProvider>
   );
 }
