@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import { userDetailContext } from '../context/userDetailContext'
 
-const provider = ({children} : {children:React.ReactNode}) => {
+const Provider = ({children} : {children:React.ReactNode}) => {
     const [userDetail,setUserDetail] = useState(null)
 
      useEffect(()=>{
@@ -17,10 +17,12 @@ const provider = ({children} : {children:React.ReactNode}) => {
   return (
     <div>
       <userDetailContext.Provider value={{}}>
-        {children}
+       <div className='max-w-7xl mx-auto'>
+         {children}
+       </div>
       </userDetailContext.Provider>
       </div>
   )
 }
 
-export default provider
+export default Provider

@@ -5,8 +5,9 @@ import {
   ClerkProvider,
  
 } from '@clerk/nextjs'
-import { Provider } from "@radix-ui/react-tooltip";
 
+import provider from "./provider";
+import Provider from "./provider";
 const AppFont = DM_Sans({
   subsets: ["latin"],
 })
@@ -30,6 +31,7 @@ export default function RootLayout({
         <Provider>
           {children}
         </Provider>
+        
       </body>
     </html>
     </ClerkProvider>
