@@ -22,12 +22,14 @@ import axios from "axios";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { SignInButton, useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 
 const Hero = () => {
   const [userInput, setUserInput] = useState("");
   const [type, setType] = useState("full-course");
   const [loading, setLoading] = useState(false);
   const { isSignedIn } = useUser();
+  const router = useRouter();
 
   const generateCourseLayout = async () => {
     if (!isSignedIn) {
@@ -47,6 +49,7 @@ const Hero = () => {
       });
       toast.success("Course layout generated!", { id: toastId });
       console.log(result.data);
+      router.push('/course/'+ courseId)
       
     } catch (error) {
       toast.error("Failed to generate course layout", { id: toastId });
