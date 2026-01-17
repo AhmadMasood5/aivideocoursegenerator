@@ -1,8 +1,9 @@
 import { db } from "@/config/db";
 import { chapterContentSlides, coursesTable } from "@/config/schema";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import type { Caption } from "@/type/courseType";
+import { currentUser } from "@clerk/nextjs/server";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +12,28 @@ export async function GET(request: NextRequest) {
   
   try {
     const courseId = request.nextUrl.searchParams.get("courseId");
-    console.log('Requested courseId:', courseId);
+    const user = await currentUser();
 
+    // ✅ If no courseId, return all user's courses
     if (!courseId) {
-      console.error('❌ Missing courseId parameter');
-      return NextResponse.json({ error: "Missing courseId" }, { status: 400 });
+      if (!user?.primaryEmailAddress?.emailAddress) {
+        return NextResponse.json({ error: "User not authenticated" }, { status: 401 });
+      }
+
+      console.log('📥 Fetching all courses for user:', user.primaryEmailAddress.emailAddress);
+      
+      const userCourses = await db
+        .select()
+        .from(coursesTable)
+        .where(eq(coursesTable.userId, user.primaryEmailAddress.emailAddress))
+        .orderBy(desc(coursesTable.createdAt));
+
+      console.log(`✓ Found ${userCourses.length} courses`);
+      return NextResponse.json(userCourses);
     }
+
+    // ✅ If courseId provided, return specific course with slides
+    console.log('📥 Requested courseId:', courseId);
 
     console.log('📥 Fetching course from database...');
     const courses = await db
