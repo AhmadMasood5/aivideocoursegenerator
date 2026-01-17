@@ -1,9 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Course } from "@/type/courseType";
-import { SubContent } from "@radix-ui/react-context-menu";
 import { Player } from "@remotion/player";
 import { Dot } from "lucide-react";
-import React from "react";
 import { CourseComposition } from "./ChapterVideo";
 type Props = {
   course: Course | null;
@@ -57,7 +55,7 @@ function CourseChapters({ course, durationBySlideId }: Props) {
                   <Player
                     component={CourseComposition}
                     inputProps={{
-                //@ts-ignore
+                //@ts-expect-error - Remotion types mismatch
                 slides: slides.filter((slide)=> slide.chapterId === chapter.chapterId),
                 durationsBySlideId: durationBySlideId??{},
               }}

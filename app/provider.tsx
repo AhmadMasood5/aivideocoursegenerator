@@ -6,15 +6,15 @@ import Header from './_components/Header'
 
 const Provider = ({children} : {children:React.ReactNode}) => {
     const [userDetail,setUserDetail] = useState(null)
-
-     useEffect(()=>{
-        createNewUser()
-    },[])
-    const createNewUser=async()=>{
+const createNewUser=async()=>{
         const  result = await axios.post('/api/user',{})
         console.log(result.data);
         setUserDetail(result.data)
     }
+     useEffect(()=>{
+        createNewUser()
+    },[])
+    
   return (
     <div>
       <userDetailContext.Provider value={{}}>

@@ -126,24 +126,24 @@ export const CourseComposition = ({ slides, durationsBySlideId }: Props) => {
     const GAP_FRAMES = Math.round(GAP_SECONDS * fps);
 
     const timeline = useMemo(() => {
-        let from = 0;
+        let fromPosition = 0;
 
         return slides.map((slide) => {
             const dur = durationsBySlideId[slide.slideId] ?? Math.ceil(6 * fps);
 
-            const item = { slide, from, dur };
+            const item = { slide, fromPosition, dur };
 
             // ✅ after slide ends, wait 2s before next slide starts
-            from += dur + GAP_FRAMES;
+            fromPosition += dur + GAP_FRAMES;
 
             return item;
         });
-    }, [slides, durationsBySlideId, fps]);
+    }, [slides, durationsBySlideId, fps,GAP_FRAMES]);
 
     return (
         <AbsoluteFill style={{ backgroundColor: "#000" }}>
-            {timeline.map(({ slide, from, dur }) => (
-                <Sequence key={from} from={from} durationInFrames={dur}>
+            {timeline.map(({ slide, fromPosition, dur }) => (
+                <Sequence key={fromPosition} from={fromPosition} durationInFrames={dur}>
                     <SlideIFrameWithReveal slide={slide} />
                 </Sequence>
             ))}
