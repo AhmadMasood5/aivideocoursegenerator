@@ -16,15 +16,18 @@ function CoursePreview() {
   const { has } = useAuth();
   const router = useRouter();
   const [courseDetails, setCourseDetails] = useState<Course | null>(null);
- const [durationBySlideId, setDurationBySlideId] = useState<Record<string, number> | null>(null);
+  const [durationBySlideId, setDurationBySlideId] = useState<Record<
+    string,
+    number
+  > | null>(null);
   const [isLoadingDurations, setIsLoadingDurations] = useState(true);
 
   // ✅ CONSTANTS AFTER HOOKS
   const fps = 30;
   const slides = courseDetails?.chapterContentSlides ?? [];
-  
+
   // ✅ Check if user has a paid plan
-  const hasPaidPlan = has?.({ plan: 'monthly' }) || false;
+  const hasPaidPlan = has?.({ plan: "monthly" }) || false;
 
   // ✅ FIRST useEffect - Fetch course details
   useEffect(() => {
@@ -62,7 +65,7 @@ function CoursePreview() {
   // ✅ SECOND useEffect - Calculate audio durations
   useEffect(() => {
     let cancel = false;
-    
+
     const run = async () => {
       if (!slides || slides.length === 0) {
         setIsLoadingDurations(false);
@@ -73,13 +76,16 @@ function CoursePreview() {
         const entries = slides.map((slide) => {
           // ✅ PRIORITY 1: Use caption duration if available
           if (slide.caption?.chunks && slide.caption.chunks.length > 0) {
-            const lastChunk = slide.caption.chunks[slide.caption.chunks.length - 1];
-            if (typeof lastChunk === 'object' && 'timestamp' in lastChunk) {
+            const lastChunk =
+              slide.caption.chunks[slide.caption.chunks.length - 1];
+            if (typeof lastChunk === "object" && "timestamp" in lastChunk) {
               const timestamp = (lastChunk as any).timestamp;
               if (Array.isArray(timestamp) && timestamp[1]) {
                 const captionDuration = timestamp[1];
                 const frame = Math.max(1, Math.ceil(captionDuration * fps));
-                console.log(`✓ Slide ${slide.slideId}: Using caption duration ${captionDuration}s (${frame} frames)`);
+                console.log(
+                  `✓ Slide ${slide.slideId}: Using caption duration ${captionDuration}s (${frame} frames)`,
+                );
                 return [slide.slideId, frame] as const;
               }
             }
@@ -91,7 +97,9 @@ function CoursePreview() {
             const wordCount = text.split(/\s+/).filter(Boolean).length;
             const estimatedSeconds = Math.ceil(wordCount / 2.5);
             const frame = Math.max(fps * 3, Math.ceil(estimatedSeconds * fps));
-            console.log(`✓ Slide ${slide.slideId}: Estimated ${estimatedSeconds}s from ${wordCount} words (${frame} frames)`);
+            console.log(
+              `✓ Slide ${slide.slideId}: Estimated ${estimatedSeconds}s from ${wordCount} words (${frame} frames)`,
+            );
             return [slide.slideId, frame] as const;
           }
 
@@ -105,10 +113,10 @@ function CoursePreview() {
           setIsLoadingDurations(false);
         }
       } catch (error) {
-        console.error('❌ Error calculating durations:', error);
+        console.error("❌ Error calculating durations:", error);
         if (!cancel) {
           const defaultDurations = Object.fromEntries(
-            slides.map(slide => [slide.slideId, fps * 6])
+            slides.map((slide) => [slide.slideId, fps * 6]),
           );
           setDurationBySlideId(defaultDurations);
           setIsLoadingDurations(false);
@@ -317,44 +325,54 @@ function CoursePreview() {
 
   // ✅ MAIN RETURN
   return (
-    <div className="flex flex-col items-center">
-      {/* Subscription Status Banner */}
+    <div className="flex flex-col items-center px-4 sm:px-6 lg:px-8">
+      {" "}
+      {/* Subscription Status Banner */}{" "}
       {!hasPaidPlan && (
         <div className="w-full max-w-4xl mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center justify-between">
+          {" "}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            {" "}
             <div>
+              {" "}
               <p className="text-blue-800 font-medium">
-                🎓 Free Plan - Limited to 2 courses
-              </p>
+                {" "}
+                🎓 Free Plan - Limited to 2 courses{" "}
+              </p>{" "}
               <p className="text-blue-600 text-sm mt-1">
-                Upgrade for unlimited course creation
-              </p>
-            </div>
-            <Link href="/pricing">
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold">
-                Upgrade Now
-              </button>
-            </Link>
-          </div>
+                {" "}
+                Upgrade for unlimited course creation{" "}
+              </p>{" "}
+            </div>{" "}
+            <Link href="/pricing" className="w-full sm:w-auto">
+              {" "}
+              <button className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold">
+                {" "}
+                Upgrade Now{" "}
+              </button>{" "}
+            </Link>{" "}
+          </div>{" "}
         </div>
-      )}
-
+      )}{" "}
       {hasPaidPlan && (
         <div className="w-full max-w-4xl mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-center">
+          {" "}
           <p className="text-green-800 text-sm">
-            ✨ <strong>Premium Member</strong> - Unlimited course creation
-          </p>
+            {" "}
+            ✨ <strong>Premium Member</strong> - Unlimited course creation{" "}
+          </p>{" "}
         </div>
-      )}
-
+      )}{" "}
+      {/* Course Info */}{" "}
       <CourseInfoCard
         course={courseDetails}
         durationBySlideId={durationBySlideId}
-      />
+      />{" "}
+      {/* Chapters */}{" "}
       <CourseChapters
         course={courseDetails}
         durationBySlideId={durationBySlideId}
-      />
+      />{" "}
     </div>
   );
 }
