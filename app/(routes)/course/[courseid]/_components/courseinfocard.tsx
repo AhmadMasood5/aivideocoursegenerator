@@ -1,6 +1,6 @@
 import { Course } from "@/type/courseType";
 import { BookOpen, ChartNoAxesColumnIncreasing, Sparkles } from "lucide-react";
-import React, { useEffect, useMemo, useState } from "react";
+import React, {  useMemo } from "react";
 import { Player } from "@remotion/player";
 import { CourseComposition } from "./ChapterVideo";
 
