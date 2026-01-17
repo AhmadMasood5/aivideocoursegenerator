@@ -2,12 +2,7 @@
   "name": "aivideogenerator",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
+  "scripts": { "dev": "next dev", "build": "next build --no-lint", "start": "next start", "lint": "eslint" },
   "dependencies": {
     "@azure/storage-blob": "^12.29.1",
     "@clerk/nextjs": "^6.36.7",
