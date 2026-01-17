@@ -2,28 +2,29 @@
 import React, { useEffect, useState } from "react";
 import CourseInfoCard from "./_components/courseinfocard";
 import axios from "axios";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Course } from "@/type/courseType";
 import CourseChapters from "./_components/CourseChapters";
 import { toast } from "sonner";
-import { useUser } from "@clerk/nextjs";
-import { getAudioData } from "@remotion/media-utils";
+import { useAuth, useUser } from "@clerk/nextjs";
+import Link from "next/link";
 
 function CoursePreview() {
   // ✅ ALL HOOKS AT THE TOP
   const { courseid } = useParams();
   const { user, isLoaded } = useUser();
+  const { has } = useAuth();
+  const router = useRouter();
   const [courseDetails, setCourseDetails] = useState<Course | null>(null);
-  const [userCredits, setUserCredits] = useState<number | null>(null);
-  const [durationBySlideId, setDurationBySlideId] = useState<Record<
-    string,
-    number
-  > | null>(null);
+ const [durationBySlideId, setDurationBySlideId] = useState<Record<string, number> | null>(null);
   const [isLoadingDurations, setIsLoadingDurations] = useState(true);
 
   // ✅ CONSTANTS AFTER HOOKS
   const fps = 30;
   const slides = courseDetails?.chapterContentSlides ?? [];
+  
+  // ✅ Check if user has a paid plan
+  const hasPaidPlan = has?.({ plan: 'monthly' }) || false;
 
   // ✅ FIRST useEffect - Fetch course details
   useEffect(() => {
@@ -45,7 +46,7 @@ function CoursePreview() {
             return;
           }
 
-          checkCreditsAndGenerate(result?.data);
+          generateVideoContent(result?.data);
         }
       } catch (error) {
         toast.error("Failed to fetch course details", { id: loadingToast });
@@ -59,145 +60,70 @@ function CoursePreview() {
   }, [courseid, isLoaded]);
 
   // ✅ SECOND useEffect - Calculate audio durations
-// In CoursePreview page.tsx, update the useEffect for calculating durations:
+  useEffect(() => {
+    let cancel = false;
+    
+    const run = async () => {
+      if (!slides || slides.length === 0) {
+        setIsLoadingDurations(false);
+        return;
+      }
 
-useEffect(() => {
-  let cancel = false;
-  
-  const run = async () => {
-    if (!slides || slides.length === 0) {
-      setIsLoadingDurations(false);
-      return;
-    }
-
-    try {
-      const entries = slides.map((slide) => {
-        // ✅ PRIORITY 1: Use caption duration if available
-        if (slide.caption?.chunks && slide.caption.chunks.length > 0) {
-          const lastChunk = slide.caption.chunks[slide.caption.chunks.length - 1];
-          if (typeof lastChunk === 'object' && 'timestamp' in lastChunk) {
-            const timestamp = (lastChunk as any).timestamp;
-            if (Array.isArray(timestamp) && timestamp[1]) {
-              const captionDuration = timestamp[1];
-              const frame = Math.max(1, Math.ceil(captionDuration * fps));
-              console.log(`✓ Slide ${slide.slideId}: Using caption duration ${captionDuration}s (${frame} frames)`);
-              return [slide.slideId, frame] as const;
+      try {
+        const entries = slides.map((slide) => {
+          // ✅ PRIORITY 1: Use caption duration if available
+          if (slide.caption?.chunks && slide.caption.chunks.length > 0) {
+            const lastChunk = slide.caption.chunks[slide.caption.chunks.length - 1];
+            if (typeof lastChunk === 'object' && 'timestamp' in lastChunk) {
+              const timestamp = (lastChunk as any).timestamp;
+              if (Array.isArray(timestamp) && timestamp[1]) {
+                const captionDuration = timestamp[1];
+                const frame = Math.max(1, Math.ceil(captionDuration * fps));
+                console.log(`✓ Slide ${slide.slideId}: Using caption duration ${captionDuration}s (${frame} frames)`);
+                return [slide.slideId, frame] as const;
+              }
             }
           }
-        }
 
-        // ✅ PRIORITY 2: Estimate from narration text length
-        if (slide.narration?.fullText) {
-          const text = slide.narration.fullText;
-          const wordCount = text.split(/\s+/).filter(Boolean).length;
-          // Average speaking rate: ~150 words per minute = 2.5 words per second
-          const estimatedSeconds = Math.ceil(wordCount / 2.5);
-          const frame = Math.max(fps * 3, Math.ceil(estimatedSeconds * fps)); // Min 3 seconds
-          console.log(`✓ Slide ${slide.slideId}: Estimated ${estimatedSeconds}s from ${wordCount} words (${frame} frames)`);
-          return [slide.slideId, frame] as const;
-        }
+          // ✅ PRIORITY 2: Estimate from narration text length
+          if (slide.narration?.fullText) {
+            const text = slide.narration.fullText;
+            const wordCount = text.split(/\s+/).filter(Boolean).length;
+            const estimatedSeconds = Math.ceil(wordCount / 2.5);
+            const frame = Math.max(fps * 3, Math.ceil(estimatedSeconds * fps));
+            console.log(`✓ Slide ${slide.slideId}: Estimated ${estimatedSeconds}s from ${wordCount} words (${frame} frames)`);
+            return [slide.slideId, frame] as const;
+          }
 
-        // ✅ FALLBACK: Default 6 seconds
-        console.log(`⚠️ Slide ${slide.slideId}: Using default 6s`);
-        return [slide.slideId, fps * 6] as const;
-      });
-
-      if (!cancel) {
-        setDurationBySlideId(Object.fromEntries(entries));
-        setIsLoadingDurations(false);
-      }
-    } catch (error) {
-      console.error('❌ Error calculating durations:', error);
-      if (!cancel) {
-        // Default all to 6 seconds on error
-        const defaultDurations = Object.fromEntries(
-          slides.map(slide => [slide.slideId, fps * 6])
-        );
-        setDurationBySlideId(defaultDurations);
-        setIsLoadingDurations(false);
-      }
-    }
-  };
-
-  run();
-
-  return () => {
-    cancel = true;
-  };
-}, [slides, fps]);
-  // ✅ FUNCTIONS AFTER HOOKS
-  const checkCreditsAndGenerate = async (course: Course) => {
-    try {
-      const userEmail = user?.primaryEmailAddress?.emailAddress;
-
-      if (!userEmail) {
-        console.error("❌ User email not available");
-        console.log("User object:", user);
-        console.log("Is loaded:", isLoaded);
-        toast.error("User email not found. Please sign in again.");
-        return;
-      }
-
-      console.log("📧 Checking credits for email:", userEmail);
-
-      const creditsResponse = await axios.get(
-        `/api/user-credits?email=${userEmail}`,
-      );
-
-      console.log("📥 Credits response:", creditsResponse.data);
-
-      const credits = creditsResponse.data.credits;
-
-      setUserCredits(credits);
-
-      if (credits <= 0) {
-        toast.error(
-          "Insufficient credits. Please purchase more credits to generate content.",
-          {
-            duration: 5000,
-          },
-        );
-        console.log("❌ No credits available. Skipping content generation.");
-        return;
-      }
-
-      console.log(`✓ User has ${credits} credits available`);
-      generateVideoContent(course);
-    } catch (error: any) {
-      console.error("❌ Error checking credits:", error);
-      console.error("Error response:", error.response?.data);
-      console.error("Error status:", error.response?.status);
-
-      if (error.response?.status === 404) {
-        console.log("📝 User not found, attempting to create...");
-        toast.loading("Setting up your account...");
-
-        try {
-          await axios.post("/api/create-user", {
-            email: user?.primaryEmailAddress?.emailAddress,
-            name: user?.fullName || "User",
-          });
-
-          const retryResponse = await axios.get(
-            `/api/user-credits?email=${user?.primaryEmailAddress?.emailAddress}`,
-          );
-          const credits = retryResponse.data.credits;
-          setUserCredits(credits);
-
-          toast.success("Account created! Starting generation...");
-          generateVideoContent(course);
-        } catch (createError) {
-          console.error("Failed to create user:", createError);
-          toast.error("Could not verify credits. Please contact support.");
-        }
-      } else {
-        toast.error("Could not verify credits. Content generation skipped.", {
-          duration: 5000,
+          // ✅ FALLBACK: Default 6 seconds
+          console.log(`⚠️ Slide ${slide.slideId}: Using default 6s`);
+          return [slide.slideId, fps * 6] as const;
         });
-      }
-    }
-  };
 
+        if (!cancel) {
+          setDurationBySlideId(Object.fromEntries(entries));
+          setIsLoadingDurations(false);
+        }
+      } catch (error) {
+        console.error('❌ Error calculating durations:', error);
+        if (!cancel) {
+          const defaultDurations = Object.fromEntries(
+            slides.map(slide => [slide.slideId, fps * 6])
+          );
+          setDurationBySlideId(defaultDurations);
+          setIsLoadingDurations(false);
+        }
+      }
+    };
+
+    run();
+
+    return () => {
+      cancel = true;
+    };
+  }, [slides, fps]);
+
+  // ✅ FUNCTION - Generate video content
   const generateVideoContent = async (course: Course) => {
     const generatingToast = toast.loading("Generating Video Content...");
 
@@ -366,24 +292,6 @@ useEffect(() => {
           { id: generatingToast },
         );
 
-        try {
-          await axios.post("/api/deduct-credit", {
-            email: user?.primaryEmailAddress?.emailAddress,
-          });
-          console.log("✓ Credit deducted");
-
-          setUserCredits((prev) =>
-            prev !== null && prev > 0 ? prev - 1 : prev,
-          );
-
-          const remainingCredits = userCredits !== null ? userCredits - 1 : 0;
-          toast.info(`1 credit used. ${remainingCredits} credits remaining.`, {
-            duration: 3000,
-          });
-        } catch (creditError) {
-          console.error("Failed to deduct credit:", creditError);
-        }
-
         const updatedCourse = await axios.get(
           `/api/course?courseId=${courseid}`,
         );
@@ -410,20 +318,31 @@ useEffect(() => {
   // ✅ MAIN RETURN
   return (
     <div className="flex flex-col items-center">
-      {userCredits !== null && userCredits <= 0 && (
-        <div className="w-full max-w-4xl mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-center">
-          <p className="text-red-800 font-medium">
-            ⚠️ No credits available. Please purchase more credits to generate
-            content.
-          </p>
+      {/* Subscription Status Banner */}
+      {!hasPaidPlan && (
+        <div className="w-full max-w-4xl mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-800 font-medium">
+                🎓 Free Plan - Limited to 2 courses
+              </p>
+              <p className="text-blue-600 text-sm mt-1">
+                Upgrade for unlimited course creation
+              </p>
+            </div>
+            <Link href="/pricing">
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold">
+                Upgrade Now
+              </button>
+            </Link>
+          </div>
         </div>
       )}
 
-      {userCredits !== null && userCredits > 0 && (
-        <div className="w-full max-w-4xl mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
-          <p className="text-blue-800 text-sm">
-            💎 You have <strong>{userCredits}</strong>{" "}
-            {userCredits === 1 ? "credit" : "credits"} remaining
+      {hasPaidPlan && (
+        <div className="w-full max-w-4xl mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-center">
+          <p className="text-green-800 text-sm">
+            ✨ <strong>Premium Member</strong> - Unlimited course creation
           </p>
         </div>
       )}

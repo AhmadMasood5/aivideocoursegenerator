@@ -2,12 +2,62 @@ import { db } from "@/config/db";
 import { client } from "@/config/openai";
 import { coursesTable } from "@/config/schema";
 import { Course_config_prompt } from "@/data/promt";
-import { currentUser } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
     try {
         console.log("🚀 API called - Starting course generation");
+        
+        // Check authentication and subscription
+        const { has } = await auth();
+        const user = await currentUser();
+        
+        if (!user?.primaryEmailAddress?.emailAddress) {
+            console.error("❌ User not authenticated");
+            return NextResponse.json(
+                { error: "User not authenticated" },
+                { status: 401 }
+            );
+        }
+
+        console.log("✅ User authenticated:", user.primaryEmailAddress.emailAddress);
+
+        // ✅ Check if user has the monthly paid plan
+        const hasPaidPlan = has({ plan: 'monthly' });
+        
+        console.log("💳 Paid plan status:", hasPaidPlan);
+
+        // ✅ If user is NOT on paid plan, enforce 2-course limit
+        if (!hasPaidPlan) {
+            console.log("⚠️ Free user - checking course limit...");
+            
+            const userCourses = await db
+                .select()
+                .from(coursesTable)
+                .where(eq(coursesTable.userId, user.primaryEmailAddress.emailAddress));
+            
+            console.log(`📊 User has ${userCourses.length} courses`);
+
+            if (userCourses.length >= 2) {
+                console.log("❌ Free user limit reached");
+                return NextResponse.json(
+                    { 
+                        error: "Free plan limit reached",
+                        message: "You've reached the maximum of 2 courses for free users. Please upgrade to the Monthly plan to create unlimited courses.",
+                        coursesCreated: userCourses.length,
+                        maxAllowed: 2,
+                        upgradeUrl: "/pricing"
+                    },
+                    { status: 403 }
+                );
+            }
+
+            console.log(`✅ Free user within limit: ${userCourses.length}/2 courses`);
+        } else {
+            console.log("✅ Paid user (Monthly plan) - no course limit");
+        }
         
         const { userInput, courseId, type } = await request.json();
         console.log("📝 Request data:", { userInput, courseId, type });
@@ -20,21 +70,8 @@ export async function POST(request: Request) {
             );
         }
 
-        console.log("👤 Fetching user...");
-        const user = await currentUser();
-        
-        if (!user?.primaryEmailAddress?.emailAddress) {
-            console.error("❌ User not authenticated");
-            return NextResponse.json(
-                { error: "User not authenticated" },
-                { status: 401 }
-            );
-        }
-        console.log("✅ User authenticated:", user.primaryEmailAddress.emailAddress);
-
         console.log("🤖 Calling Azure OpenAI...");
         console.log("Deployment:", process.env.AZURE_OPENAI_DEPLOYMENT_NAME);
-        console.log("Endpoint:", process.env.AZURE_OPENAI_ENDPOINT);
         
         const response = await client.chat.completions.create({
             model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME!,
@@ -45,11 +82,25 @@ export async function POST(request: Request) {
                 },
                 {
                     role: 'user',
-                    content: `Course Topic: ${userInput}`
+                    content: `Generate a comprehensive course for: "${userInput}"
+
+Analyze this topic and:
+1. Determine the appropriate difficulty level (Beginner/Intermediate/Advanced)
+2. If "beginner" or "basics" is mentioned, start from absolute fundamentals
+3. Create a logical learning progression from simple to complex
+4. Ensure Chapter 1 introduces core concepts before diving into details
+
+For a BEGINNER course, Chapter 1 MUST answer:
+- What is [topic]?
+- Why should I learn this?
+- What problems does it solve?
+
+Then progressively build skills across the remaining chapters.
+
+Generate the course configuration now.`
                 }
             ],
             response_format: { type: "json_object" },
-            // ❌ REMOVED: temperature: 0.7, - Not supported by this deployment
         });
         
         console.log("✅ Azure OpenAI response received");
@@ -71,6 +122,7 @@ export async function POST(request: Request) {
             console.log("✅ JSON parsed successfully");
             console.log("Course structure:", {
                 courseTitle: JsonResult.courseTitle,
+                courseName: JsonResult.courseName,
                 totalChapters: JsonResult.totalChapters,
                 chaptersCount: JsonResult.chapters?.length
             });
@@ -99,8 +151,8 @@ export async function POST(request: Request) {
             );
         }
 
-        // Use courseTitle if available, fallback to courseName
-        const finalCourseTitle = JsonResult.courseTitle || JsonResult.courseName;
+        // Use courseName (from updated prompt) or fallback to courseTitle
+        const finalCourseTitle = JsonResult.courseName || JsonResult.courseTitle;
 
         console.log("💾 Inserting into database...");
         const courseResult = await db.insert(coursesTable).values({
@@ -113,7 +165,16 @@ export async function POST(request: Request) {
         }).returning();
 
         console.log("✅ Course created successfully:", courseResult[0].courseId);
-        return NextResponse.json(courseResult[0]);
+        
+        // Return success with subscription info
+        return NextResponse.json({
+            ...courseResult[0],
+            subscription: {
+                isPaidUser: hasPaidPlan,
+                plan: hasPaidPlan ? 'monthly' : 'free',
+                coursesRemaining: hasPaidPlan ? 'unlimited' : 'limited'
+            }
+        });
 
     } catch (error) {
         console.error("💥 API Error:", error);
