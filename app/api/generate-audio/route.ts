@@ -10,6 +10,11 @@ const replicate = new Replicate({
   auth: process.env.REPLICATE_API_KEY || ''
 });
 
+// Rate limiting constants
+const RATE_LIMIT_DELAY = 12000; // 12 seconds between requests (5 requests/minute)
+const MAX_RETRIES = 3;
+const RETRY_DELAY_BASE = 5000; // 5 seconds base delay for retries
+
 export async function POST(request: NextRequest) {
   console.log('🎬 Audio generation API called');
   
@@ -56,6 +61,7 @@ export async function POST(request: NextRequest) {
 
     const audioResults = [];
 
+    // Process slides sequentially with rate limiting
     for (let i = 0; i < slides.length; i++) {
       const slide = slides[i];
       console.log(`\n--- Processing slide ${i + 1}/${slides.length} ---`);
@@ -64,12 +70,14 @@ export async function POST(request: NextRequest) {
       const narration = slide.narration?.fullText || slide.narration || "";
 
       if (!narration || narration.trim() === "") {
-        console.log(`⚠️ Skipping slide ${i} - no narration`);
+        console.log(`⚠️ Skipping slide ${i + 1} - no narration`);
         audioResults.push({
           slideId: slide.slideId,
           audioFileName: slide.audioFileName,
           success: false,
-          error: "No narration text"
+          error: "No narration text",
+          audioUrl: null,
+          captions: null
         });
         continue;
       }
@@ -100,13 +108,12 @@ export async function POST(request: NextRequest) {
         console.log(`✓ Audio generated: ${audioBuffer.length} bytes`);
 
         console.log(`🎵 Step 2: Uploading to Azure...`);
-        // Upload to Azure Blob Storage
         const audioUrl = await saveAudioToStorage(audioBuffer, slide.audioFileName);
         console.log(`✓ Uploaded to: ${audioUrl}`);
 
-        console.log(`🎵 Step 3: Generating captions...`);
-        // Generate captions for this audio file
-        const captions = await GenerateCaptions(audioUrl);
+        console.log(`🎵 Step 3: Generating captions with retry logic...`);
+        // Generate captions with retry logic
+        const captions = await GenerateCaptionsWithRetry(audioUrl);
         console.log(`✓ Captions generated`);
 
         const result = {
@@ -121,8 +128,14 @@ export async function POST(request: NextRequest) {
         audioResults.push(result);
         console.log(`✅ Slide ${i + 1} completed successfully`);
 
+        // Add delay before next slide (except for last slide)
+        if (i < slides.length - 1) {
+          console.log(`⏳ Waiting ${RATE_LIMIT_DELAY / 1000}s before next slide...`);
+          await sleep(RATE_LIMIT_DELAY);
+        }
+
       } catch (audioError: any) {
-        console.error(`❌ Failed to process slide ${i}:`);
+        console.error(`❌ Failed to process slide ${i + 1}:`);
         console.error('Error details:', audioError);
         console.error('Error message:', audioError.message);
         console.error('Error response:', audioError.response?.data);
@@ -132,8 +145,16 @@ export async function POST(request: NextRequest) {
           audioFileName: slide.audioFileName,
           success: false,
           error: audioError instanceof Error ? audioError.message : "Unknown error",
-          errorDetails: audioError.response?.data || null
+          errorDetails: audioError.response?.data || null,
+          audioUrl: null,
+          captions: null
         });
+
+        // Still add delay even on error to respect rate limits
+        if (i < slides.length - 1) {
+          console.log(`⏳ Waiting ${RATE_LIMIT_DELAY / 1000}s before next slide...`);
+          await sleep(RATE_LIMIT_DELAY);
+        }
       }
     }
 
@@ -176,7 +197,7 @@ const saveAudioToStorage = async (audioBuffer: Buffer, filename: string): Promis
       throw new Error('AZURE_STORAGE_CONNECTION_STRING is not configured');
     }
 
-    const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'audio-files';
+    const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'audio';
     console.log(`  📦 Container: ${containerName}`);
 
     const blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
@@ -206,9 +227,9 @@ const saveAudioToStorage = async (audioBuffer: Buffer, filename: string): Promis
   }
 }
 
-const GenerateCaptions = async (audioUrl: string) => {
+const GenerateCaptionsWithRetry = async (audioUrl: string, attempt = 1): Promise<any> => {
   try {
-    console.log(`  📝 Calling Replicate API...`);
+    console.log(`  📝 Calling Replicate API (attempt ${attempt}/${MAX_RETRIES})...`);
     const input = {
       audio: audioUrl,
       batch_size: 64
@@ -219,10 +240,38 @@ const GenerateCaptions = async (audioUrl: string) => {
       { input }
     );
 
-    console.log(`  ✓ Captions received`);
+    console.log(`  ✓ Captions received on attempt ${attempt}`);
     return output;
-  } catch (error) {
-    console.error('  ❌ Replicate error:', error);
+
+  } catch (error: any) {
+    console.error(`  ❌ Replicate error on attempt ${attempt}:`, error.message);
+
+    // Check if it's a rate limit error (429)
+    if (error.response?.status === 429 || error.message?.includes('429') || error.message?.includes('throttled')) {
+      const retryAfter = parseInt(error.response?.headers?.get?.('retry-after') || '10');
+      
+      if (attempt < MAX_RETRIES) {
+        const delayTime = Math.max(retryAfter * 1000, RETRY_DELAY_BASE * attempt);
+        console.log(`  ⏳ Rate limited. Waiting ${delayTime / 1000}s before retry ${attempt + 1}/${MAX_RETRIES}...`);
+        await sleep(delayTime);
+        return GenerateCaptionsWithRetry(audioUrl, attempt + 1);
+      } else {
+        console.error(`  ❌ Max retries (${MAX_RETRIES}) reached for caption generation`);
+        throw new Error(`Rate limit exceeded after ${MAX_RETRIES} attempts. Please add more credits to Replicate.`);
+      }
+    }
+
+    // For non-rate-limit errors, retry with exponential backoff
+    if (attempt < MAX_RETRIES) {
+      const delayTime = RETRY_DELAY_BASE * Math.pow(2, attempt - 1);
+      console.log(`  ⏳ Retrying after ${delayTime / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+      await sleep(delayTime);
+      return GenerateCaptionsWithRetry(audioUrl, attempt + 1);
+    }
+
+    // If all retries failed, throw the error
     throw error;
   }
 }
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

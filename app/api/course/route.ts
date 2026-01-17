@@ -2,6 +2,7 @@ import { db } from "@/config/db";
 import { chapterContentSlides, coursesTable } from "@/config/schema";
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+import type { Caption } from "@/type/courseType";
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +32,20 @@ export async function GET(request: NextRequest) {
     console.log('✓ Course found:', courses[0].courseName);
 
     console.log('📥 Fetching chapter content slides...');
-    const slides = await db
+    const rawSlides = await db
       .select()
       .from(chapterContentSlides)
       .where(eq(chapterContentSlides.courseId, courseId));
 
-    console.log(`✓ Found ${slides.length} slides`);
+    console.log(`✓ Found ${rawSlides.length} slides`);
+
+    // ✅ Cast JSON fields to proper types
+    const slides = rawSlides.map(slide => ({
+      ...slide,
+      narration: slide.narration as { fullText: string } | null,
+      caption: slide.caption as Caption | null,
+      revealData: slide.revealData as string[] | null,
+    }));
 
     const response = {
       ...courses[0],

@@ -22,16 +22,28 @@ export type chapter={
     subContent:string[]
 }
 
-export type chapterContentSlide={
- id:number;
-    courseId:string;
-    chapterId:string;
-    slideId:string;
-    slideIndex:number;
-    audioFileName:string;
-    narration:{
-        fullText:string;
-    },
-    html:string;
-    revealData:string[];
-}
+
+
+export type CaptionChunk = {
+  text: string;
+  timestamp: [number, number];
+};
+
+export type Caption = {
+  chunks: CaptionChunk[];
+  text?: string;
+};
+
+export type chapterContentSlide = {
+  id: number;
+  courseId: string;
+  chapterId: string;
+  slideId: string;
+  slideIndex: number;
+  audioFileName: string | null;
+  audioFileUrl: string | null;
+  narration: { fullText: string } | null;
+  caption: Caption | null; // ✅ Changed from { chunks: string[] }
+  html: string | null;
+  revealData: string[] | null;
+};
