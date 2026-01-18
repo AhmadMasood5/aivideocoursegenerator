@@ -13,11 +13,23 @@ function CourseChapters({ course, durationBySlideId }: Props) {
   const slides = course?.chapterContentSlides ?? [];
 
   const getChapterDurationInFrame = (chapterId: string) => {
-    if (!durationBySlideId || !course) return 30;
-    return course?.chapterContentSlides
-      .filter((slide) => slide.chapterId === chapterId)
-      .reduce((sum, slide) => sum + (durationBySlideId[slide.slideId] ?? 30), 0);
-  };
+  if (!durationBySlideId || !course) return 30;
+
+  const chapterSlides = course.chapterContentSlides.filter(
+    (slide) => slide.chapterId === chapterId
+  );
+
+  if (chapterSlides.length === 0) {
+    // fallback duration so Player never gets 0
+    return 30;
+  }
+
+  return chapterSlides.reduce(
+    (sum, slide) => sum + (durationBySlideId[slide.slideId] ?? 30),
+    0
+  );
+};
+
 
   return (
     <div className="max-w-6xl -mt-5 p-6 sm:p-10 border rounded-3xl w-full bg-background/80 backdrop-blur">
