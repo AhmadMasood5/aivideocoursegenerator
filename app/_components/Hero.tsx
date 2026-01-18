@@ -12,14 +12,12 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, Send } from "lucide-react";
 import { QUICK_VIDEO_SUGGESTIONS } from "@/data/constant";
 import axios from "axios";
-import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { SignInButton, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
@@ -37,7 +35,6 @@ const Hero = () => {
       toast.error("Please sign in to generate a course");
       return;
     }
-
     if (!userInput.trim()) {
       toast.error("Please enter a topic");
       return;
@@ -51,100 +48,83 @@ const Hero = () => {
       const result = await axios.post("/api/generate-course-layout", {
         userInput,
         type,
-        courseId: courseId,
+        courseId,
       });
 
-      // ✅ Handle free plan limit
-      if (result?.data?.error === 'Free plan limit reached') {
+      if (result?.data?.error === "Free plan limit reached") {
         toast.error("Free Plan Limit Reached", {
           id: toastId,
-          description: "You've created 2 courses. Upgrade to create unlimited courses!",
+          description:
+            "You've created 2 courses. Upgrade to create unlimited courses!",
           action: {
             label: "Upgrade Now",
-            onClick: () => router.push('/pricing')
+            onClick: () => router.push("/pricing"),
           },
-          duration: 6000
+          duration: 6000,
         });
         return;
       }
 
-      // ✅ Handle other errors
       if (result?.data?.error) {
         toast.error(result.data.error, {
           id: toastId,
-          description: result.data.message || "Please try again"
+          description: result.data.message || "Please try again",
         });
         return;
       }
 
-      // ✅ Success
-      toast.success("Course layout generated!", { 
+      toast.success("Course layout generated!", {
         id: toastId,
-        description: "Redirecting to your course..."
+        description: "Redirecting to your course...",
       });
-      
-      console.log("✅ Course created:", result.data);
-      
-      // Small delay for better UX
+
       setTimeout(() => {
-        router.push('/course/' + courseId);
+        router.push("/course/" + courseId);
       }, 500);
-      
     } catch (error: any) {
       console.error("❌ Course generation error:", error);
-      
-      // ✅ Better error handling
-      if (error.response?.status === 403) {
-        toast.error("Free Plan Limit Reached", {
-          id: toastId,
-          description: "You've reached your course limit. Upgrade for unlimited courses!",
-          action: {
-            label: "View Plans",
-            onClick: () => router.push('/pricing')
-          },
-          duration: 6000
-        });
-      } else if (error.response?.status === 401) {
-        toast.error("Authentication Required", {
-          id: toastId,
-          description: "Please sign in to continue"
-        });
-      } else {
-        toast.error("Failed to generate course", { 
-          id: toastId,
-          description: error.response?.data?.message || "Please try again later"
-        });
-      }
+      toast.error("Failed to generate course", {
+        id: toastId,
+        description: error.response?.data?.message || "Please try again later",
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex items-center flex-col mt-20">
-      <div>
-        <h2 className="text-3xl font-bold">
+    <div className="flex flex-col items-center mt-16 px-4">
+      {/* Heading */}
+      <div className="text-center max-w-2xl">
+        <h2 className="text-2xl sm:text-3xl font-bold">
           Learn Smarter With{" "}
           <span className="text-primary">AI Video Courses</span>
         </h2>
-        <p className="text-center text-gray-500 mt-3 text-xl">
+        <p className="text-gray-500 mt-3 text-base sm:text-lg">
           Turn Any Topic into a Complete Course
         </p>
       </div>
-      
-      <div className="grid w-full max-w-xl mt-5 gap-6 bg-white z-10">
-        <InputGroup>
-          <InputGroupTextarea
-            data-slot="input-group-control"
-            className="flex field-sizing-content min-h-24 w-full resize-none rounded-xl bg-white px-3 py-2.5 text-base transition-[color,box-shadow] outline-none md:text-sm"
-            placeholder="e.g., Introduction to React, Python for Beginners, Web Design Basics..."
-            value={userInput}
-            onChange={(e) => setUserInput(e.target.value)}
-            disabled={loading}
-          />
-          <InputGroupAddon align="block-end">
-            <Select value={type} onValueChange={setType} disabled={loading}>
-              <SelectTrigger className="w-45">
+
+      {/* Input + Select + Button */}
+      <div className="w-full max-w-xl mt-6 bg-white rounded-xl shadow-sm p-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <InputGroup className="flex-1">
+            <InputGroupTextarea
+              className="min-h-24 w-full resize-none rounded-xl px-3 py-2.5 text-base md:text-sm"
+              placeholder="e.g., Introduction to React, Python for Beginners..."
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
+              disabled={loading}
+            />
+          </InputGroup>
+
+          <div className="flex gap-2 sm:flex-col sm:gap-4">
+            <Select
+              value={type}
+              onValueChange={setType}
+              disabled={loading}
+            >
+              <SelectTrigger className="w-full sm:w-40">
                 <SelectValue placeholder="Full Course" />
               </SelectTrigger>
               <SelectContent>
@@ -154,44 +134,44 @@ const Hero = () => {
                 </SelectGroup>
               </SelectContent>
             </Select>
-            
+
             {isSignedIn ? (
               <InputGroupButton
-                className="ml-auto"
                 size="icon-sm"
                 variant="default"
                 onClick={generateCourseLayout}
                 disabled={loading || !userInput.trim()}
+                className="w-full sm:w-auto"
               >
                 {loading ? <Loader2 className="animate-spin" /> : <Send />}
               </InputGroupButton>
             ) : (
               <SignInButton mode="modal">
                 <InputGroupButton
-                  className="ml-auto"
                   size="icon-sm"
                   variant="default"
+                  className="w-full sm:w-auto"
                 >
                   <Send />
                 </InputGroupButton>
               </SignInButton>
             )}
-          </InputGroupAddon>
-        </InputGroup>
+          </div>
+        </div>
       </div>
 
       {/* Quick suggestions */}
-      <div className="flex gap-5 mt-5 max-w-3xl flex-wrap justify-center relative">
+      <div className="flex flex-wrap gap-3 mt-6 max-w-3xl justify-center">
         {QUICK_VIDEO_SUGGESTIONS.map((suggestion, index) => (
-          <h2
+          <button
             key={index}
             onClick={() => !loading && setUserInput(suggestion?.prompt)}
-            className={`border cursor-pointer rounded-2xl px-2 p-1 text-sm bg-white/70 hover:bg-white transition-colors relative z-20 ${
-              loading ? 'opacity-50 cursor-not-allowed' : ''
+            className={`border rounded-2xl px-3 py-1 text-sm bg-white/70 hover:bg-white transition-colors ${
+              loading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
             }`}
           >
             {suggestion.title}
-          </h2>
+          </button>
         ))}
       </div>
 
@@ -200,7 +180,10 @@ const Hero = () => {
         <div className="mt-8 text-center text-sm text-gray-600">
           <p>
             Free users can create up to 2 courses.{" "}
-            <Link href="/pricing" className="text-primary hover:underline font-semibold">
+            <Link
+              href="/pricing"
+              className="text-primary hover:underline font-semibold"
+            >
               Upgrade for unlimited courses →
             </Link>
           </p>
