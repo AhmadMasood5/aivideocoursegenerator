@@ -16,7 +16,7 @@ function CourseListCard({ courseItem }: Props) {
       <CardHeader>
         {/* Title + Level */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-          <h2 className="font-semibold text-base sm:text-md truncate">
+          <h2 className="font-semibold text-sm sm:text-md line-clamp-1 sm:line-clamp-2">
             {courseItem.courseName}
           </h2>
           <h2 className="text-primary text-xs sm:text-sm bg-primary/10 p-1 px-2 border rounded-full border-primary w-fit">
