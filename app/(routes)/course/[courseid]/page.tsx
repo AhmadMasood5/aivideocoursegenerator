@@ -325,21 +325,23 @@ function CoursePreview() {
 
   // ✅ MAIN RETURN
   return (
-    <div className="flex flex-col items-center px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+    <div className="flex flex-col items-center px-4 sm:px-6 lg:px-8">
       {" "}
       {/* Subscription Status Banner */}{" "}
       {!hasPaidPlan && (
-        <div className="w-full mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="w-full max-w-4xl mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           {" "}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-center sm:text-left">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             {" "}
             <div>
               {" "}
               <p className="text-blue-800 font-medium">
-                🎓 Free Plan - Limited to 2 courses
+                {" "}
+                🎓 Free Plan - Limited to 2 courses{" "}
               </p>{" "}
               <p className="text-blue-600 text-sm mt-1">
-                Upgrade for unlimited course creation
+                {" "}
+                Upgrade for unlimited course creation{" "}
               </p>{" "}
             </div>{" "}
             <Link href="/pricing" className="w-full sm:w-auto">
@@ -353,7 +355,7 @@ function CoursePreview() {
         </div>
       )}{" "}
       {hasPaidPlan && (
-        <div className="w-full mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-center">
+        <div className="w-full max-w-4xl mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-center">
           {" "}
           <p className="text-green-800 text-sm">
             {" "}
