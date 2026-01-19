@@ -6,6 +6,62 @@ import { auth } from "@clerk/nextjs/server";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
+// ✅ NEW: Validate and fix incomplete narrations
+function validateAndFixNarration(text: string, topic: string): string {
+  // Count words
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+  
+  // Check if last sentence is complete
+  const lastChar = text.trim().slice(-1);
+  const endsWithPunctuation = ['.', '!', '?'].includes(lastChar);
+  
+  if (!endsWithPunctuation) {
+    console.warn(`⚠️ Incomplete narration detected (no ending punctuation)! Fixing...`);
+    
+    // Remove incomplete last sentence
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
+    if (sentences.length > 0) {
+      // Keep only complete sentences
+      let completeSentences = sentences.join(' ').trim();
+      
+      // If too short after removing incomplete sentence, add a closing
+      const completeWords = completeSentences.split(/\s+/).filter(Boolean).length;
+      if (completeWords < 45) {
+        completeSentences += ` This concept is essential for understanding ${topic}.`;
+      }
+      
+      return completeSentences;
+    } else {
+      // No complete sentences found, add ending
+      return text.trim() + '.';
+    }
+  }
+  
+  // Truncate if too long (over 60 words or 450 chars)
+  if (wordCount > 60 || text.length > 450) {
+    console.warn(`⚠️ Narration too long (${wordCount} words, ${text.length} chars). Truncating...`);
+    
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
+    let result = '';
+    let currentWords = 0;
+    
+    for (const sentence of sentences) {
+      const sentenceWords = sentence.trim().split(/\s+/).filter(Boolean).length;
+      if (currentWords + sentenceWords <= 60 && (result + sentence).length <= 450) {
+        result += sentence;
+        currentWords += sentenceWords;
+      } else {
+        break;
+      }
+    }
+    
+    return result.trim();
+  }
+  
+  return text;
+}
+
 // ✅ Truncate narration to respect Fonada API limits
 function truncateNarration(text: string, maxChars: number = 450): string {
   if (text.length <= maxChars) return text;
@@ -114,13 +170,30 @@ Chapter Slug: ${chapterSlug}
 Topics to cover (one slide per topic):
 ${subContent.map((topic, i) => `${i + 1}. ${topic}`).join('\n')}
 
-CRITICAL REQUIREMENTS:
-- Generate exactly ${subContent.length} slides
-- Each narration MUST be 60-75 words (approximately 400-450 characters MAX)
-- IMPORTANT: Fonada TTS API has a 450 character limit - exceeding this causes failures
-- Include complete HTML for each slide (1280x720, dark gradient theme)
-- Include reveal data for progressive animations
-- Return as JSON object with keys "0", "1", "2", etc.
+CRITICAL NARRATION REQUIREMENTS:
+- Each narration MUST be exactly 50-60 words (NOT characters)
+- Target speaking time: 20-25 seconds at normal pace (120-150 words per minute)
+- COMPLETE sentences only - no cut-offs or incomplete thoughts
+- Fonada TTS API limit: 450 characters MAX
+- End each narration with a complete sentence - NO trailing phrases
+
+STRUCTURE FOR EACH NARRATION:
+1. Opening statement (1 sentence, 10-12 words)
+2. Key explanation (2-3 sentences, 30-35 words)
+3. Example (1 sentence, 10-12 words)
+4. Closing thought (1 sentence, 8-10 words)
+
+WORD COUNT VERIFICATION:
+- Minimum: 50 words
+- Maximum: 60 words
+- Character limit: 450 max
+
+BAD EXAMPLE (incomplete):
+"For example, calculate acceleration down a 30° ramp with friction coefficient 0.2 for a 2 kg block. Break forces down step-by-step and check units."
+(This is incomplete - doesn't finish the thought)
+
+GOOD EXAMPLE (complete, 58 words):
+"Newton's laws help us solve real problems with forces and motion. Use F=ma to find acceleration, break forces into components on inclines, and include friction effects. For example, a block sliding down a 30-degree ramp shows how gravity and friction combine. These principles apply to everyday situations you encounter."
 
 Example structure:
 {
@@ -131,14 +204,20 @@ Example structure:
     "subtitle": "Brief subtitle",
     "audioFileName": "${chapterSlug}-01.mp3",
     "narration": {
-      "fullText": "A concise 60-75 word explanation with clear concepts and 1-2 examples. Keep it under 450 characters total."
+      "fullText": "Complete 50-60 word narration with full sentences. Opening statement here. Key explanation with clear concepts. Example that illustrates the point. Closing thought that wraps it up."
     },
     "html": "<!DOCTYPE html>...(complete 1280x720 HTML slide)...",
     "revelData": ["r1", "r2", "r3", "r4"]
   }
 }
 
-Now generate all ${subContent.length} slides with CONCISE narration (60-75 words, max 450 characters).`
+FINAL CHECK before generating:
+- Count words in each narration (must be 50-60)
+- Verify last sentence is complete
+- Ensure no trailing incomplete phrases
+- Confirm character count under 450
+
+Now generate all ${subContent.length} slides with COMPLETE narration (50-60 words each).`
       }
     ];
 
@@ -151,7 +230,7 @@ Now generate all ${subContent.length} slides with CONCISE narration (60-75 words
       const fallbackSlides: Record<string, any> = {};
       subContent.forEach((topic, i) => {
         const index = i + 1;
-        const fallbackNarration = `This section explores ${topic}. We'll cover fundamental concepts and practical applications essential for ${courseName}. You'll learn key principles through examples and discover best practices for real projects.`;
+        const fallbackNarration = `This section explores ${topic}. We'll cover fundamental concepts and practical applications essential for understanding. You'll learn key principles through clear examples. These skills apply to real situations you encounter.`;
         
         fallbackSlides[i] = {
           slideId: `${chapterSlug}-${String(index).padStart(2, "0")}`,
@@ -160,7 +239,7 @@ Now generate all ${subContent.length} slides with CONCISE narration (60-75 words
           subtitle: `Part ${index} of ${subContent.length}`,
           audioFileName: `${chapterSlug}-${String(index).padStart(2, "0")}.mp3`,
           narration: { 
-            fullText: truncateNarration(fallbackNarration, 450)
+            fullText: validateAndFixNarration(fallbackNarration, topic)
           },
           revelData: ["r1", "r2", "r3"],
           html: `<!DOCTYPE html>
@@ -217,7 +296,7 @@ Now generate all ${subContent.length} slides with CONCISE narration (60-75 words
       const fallbackSlides: Record<string, any> = {};
       subContent.forEach((topic, i) => {
         const index = i + 1;
-        const fallbackNarration = `This section explores ${topic}. We'll cover fundamental concepts and practical applications essential for ${courseName}. You'll learn key principles through examples and discover best practices for real projects.`;
+        const fallbackNarration = `This section explores ${topic}. We'll cover fundamental concepts and practical applications essential for understanding. You'll learn key principles through clear examples. These skills apply to real situations you encounter.`;
         
         fallbackSlides[i] = {
           slideId: `${chapterSlug}-${String(index).padStart(2, "0")}`,
@@ -226,7 +305,7 @@ Now generate all ${subContent.length} slides with CONCISE narration (60-75 words
           subtitle: `Part ${index} of ${subContent.length}`,
           audioFileName: `${chapterSlug}-${String(index).padStart(2, "0")}.mp3`,
           narration: { 
-            fullText: truncateNarration(fallbackNarration, 450)
+            fullText: validateAndFixNarration(fallbackNarration, topic)
           },
           revelData: ["r1", "r2", "r3"],
           html: `<div style="padding:40px;font-family:Arial;background:linear-gradient(135deg, #1e293b 0%, #7e22ce 50%, #1e293b 100%);height:720px;display:flex;align-items:center;justify-content:center;color:white">
@@ -245,25 +324,37 @@ Now generate all ${subContent.length} slides with CONCISE narration (60-75 words
       return NextResponse.json(fallbackSlides);
     }
 
-    // ✅ Process and truncate narrations
+    // ✅ Process, validate, and truncate narrations
     const metadataOnly: Record<string, any> = {};
     subContent.forEach((topic, i) => {
       const slide = VideoContent[i] || {};
       const index = i + 1;
 
-      const originalNarration = slide.narration?.fullText || `This section covers ${topic}. We'll explore key concepts and practical applications for ${courseName}.`;
-      const truncatedNarration = truncateNarration(originalNarration, 450);
+      let originalNarration = slide.narration?.fullText || `This section covers ${topic}. We'll explore key concepts and practical applications. You'll learn important principles. These apply to real situations.`;
       
-      const charCount = truncatedNarration.length;
-      const wordCount = truncatedNarration.split(/\s+/).filter(Boolean).length;
+      // ✅ First validate and fix incomplete sentences
+      const validatedNarration = validateAndFixNarration(originalNarration, topic);
+      
+      // ✅ Then truncate if needed
+      const finalNarration = truncateNarration(validatedNarration, 450);
+      
+      const charCount = finalNarration.length;
+      const wordCount = finalNarration.split(/\s+/).filter(Boolean).length;
+      const endsComplete = /[.!?]$/.test(finalNarration.trim());
+      
+      if (!endsComplete) {
+        console.error(`❌ Slide ${i}: Narration STILL incomplete after validation!`);
+      }
       
       if (charCount > 450) {
-        console.warn(`⚠️ Slide ${i}: Narration still too long (${charCount} chars). This shouldn't happen!`);
-      } else if (charCount < originalNarration.length) {
-        console.log(`✂️ Slide ${i}: Truncated from ${originalNarration.length} to ${charCount} chars`);
-      } else {
-        console.log(`✅ Slide ${i}: ${wordCount} words, ${charCount} chars (within limit)`);
+        console.warn(`⚠️ Slide ${i}: Narration still too long (${charCount} chars).`);
+      } else if (validatedNarration !== originalNarration) {
+        console.log(`🔧 Slide ${i}: Fixed incomplete narration`);
+      } else if (finalNarration !== validatedNarration) {
+        console.log(`✂️ Slide ${i}: Truncated from ${validatedNarration.length} to ${charCount} chars`);
       }
+      
+      console.log(`✅ Slide ${i}: ${wordCount} words, ${charCount} chars, complete: ${endsComplete}`);
 
       metadataOnly[i] = {
         slideId: slide.slideId || `${chapterSlug}-${String(index).padStart(2, "0")}`,
@@ -272,7 +363,7 @@ Now generate all ${subContent.length} slides with CONCISE narration (60-75 words
         subtitle: slide.subtitle || `Part ${index}`,
         audioFileName: slide.audioFileName || `${chapterSlug}-${String(index).padStart(2, "0")}.mp3`,
         narration: { 
-          fullText: truncatedNarration
+          fullText: finalNarration
         },
         revelData: slide.revelData || slide.revealData || ["r1", "r2", "r3"],
         html: slide.html || `<div style="padding:40px;font-family:Arial;background:#1e293b;height:720px;display:flex;align-items:center;justify-content:center;color:white">
