@@ -1,3 +1,5 @@
+// api/generate-audio/route.ts
+
 import axios from "axios";
 import { BlobServiceClient } from '@azure/storage-blob'
 import { NextRequest, NextResponse } from "next/server";
@@ -10,10 +12,11 @@ const replicate = new Replicate({
   auth: process.env.REPLICATE_API_KEY || ''
 });
 
-// Rate limiting constants
-const RATE_LIMIT_DELAY = 12000; // 12 seconds between requests (5 requests/minute)
-const MAX_RETRIES = 3;
-const RETRY_DELAY_BASE = 5000; // 5 seconds base delay for retries
+// ✅ IMPROVED RATE LIMITING
+const RATE_LIMIT_DELAY = 15000; // 15 seconds between requests (increased from 12s)
+const MAX_RETRIES = 5; // Increased from 3
+const RETRY_DELAY_BASE = 10000; // 10 seconds base delay (increased from 5s)
+const REPLICATE_DELAY = 3000; // ✅ NEW: Extra delay before Replicate calls
 
 export async function POST(request: NextRequest) {
   console.log('🎬 Audio generation API called');
@@ -110,6 +113,10 @@ export async function POST(request: NextRequest) {
         console.log(`🎵 Step 2: Uploading to Azure...`);
         const audioUrl = await saveAudioToStorage(audioBuffer, slide.audioFileName);
         console.log(`✓ Uploaded to: ${audioUrl}`);
+
+        // ✅ NEW: Add delay before Replicate call to avoid bursts
+        console.log(`⏳ Waiting ${REPLICATE_DELAY / 1000}s before caption generation...`);
+        await sleep(REPLICATE_DELAY);
 
         console.log(`🎵 Step 3: Generating captions with retry logic...`);
         // Generate captions with retry logic
@@ -227,6 +234,7 @@ const saveAudioToStorage = async (audioBuffer: Buffer, filename: string): Promis
   }
 }
 
+// ✅ IMPROVED: Better retry logic with longer delays
 const GenerateCaptionsWithRetry = async (audioUrl: string, attempt = 1): Promise<any> => {
   try {
     console.log(`  📝 Calling Replicate API (attempt ${attempt}/${MAX_RETRIES})...`);
@@ -247,17 +255,25 @@ const GenerateCaptionsWithRetry = async (audioUrl: string, attempt = 1): Promise
     console.error(`  ❌ Replicate error on attempt ${attempt}:`, error.message);
 
     // Check if it's a rate limit error (429)
-    if (error.response?.status === 429 || error.message?.includes('429') || error.message?.includes('throttled')) {
-      const retryAfter = parseInt(error.response?.headers?.get?.('retry-after') || '10');
-      
+    const isRateLimit = 
+      error.response?.status === 429 || 
+      error.message?.includes('429') || 
+      error.message?.includes('throttled') ||
+      error.message?.includes('rate limit') ||
+      error.message?.toLowerCase().includes('too many requests');
+
+    if (isRateLimit) {
       if (attempt < MAX_RETRIES) {
-        const delayTime = Math.max(retryAfter * 1000, RETRY_DELAY_BASE * attempt);
+        // ✅ IMPROVED: Use longer delays for rate limits
+        const retryAfter = parseInt(error.response?.headers?.get?.('retry-after') || '30');
+        const delayTime = Math.max(retryAfter * 1000, RETRY_DELAY_BASE * Math.pow(2, attempt - 1));
+        
         console.log(`  ⏳ Rate limited. Waiting ${delayTime / 1000}s before retry ${attempt + 1}/${MAX_RETRIES}...`);
         await sleep(delayTime);
         return GenerateCaptionsWithRetry(audioUrl, attempt + 1);
       } else {
         console.error(`  ❌ Max retries (${MAX_RETRIES}) reached for caption generation`);
-        throw new Error(`Rate limit exceeded after ${MAX_RETRIES} attempts. Please add more credits to Replicate.`);
+        throw new Error(`Rate limit exceeded after ${MAX_RETRIES} attempts. Please wait and try again later.`);
       }
     }
 

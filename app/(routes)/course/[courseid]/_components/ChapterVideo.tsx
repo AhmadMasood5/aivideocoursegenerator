@@ -11,17 +11,21 @@ import {
 /* ---------------------------------- Types --------------------------------- */
 
 type CaptionChunk = {
+    text: string;
     timestamp: [number, number];
+};
+
+type Caption = {
+    chunks: CaptionChunk[];
+    text?: string;
 };
 
 type Slide = {
     slideId: string;
     html: string;
     audioFileUrl: string;
-    revelData?: string[];
-    caption?: {
-        chunks: CaptionChunk[];
-    };
+    revealData?: string[] | null; // ✅ Fixed spelling and added null
+    caption?: Caption | null; // ✅ Matches your database type
 };
 
 /* ----------------------- Reveal runtime (iframe side) ------------------------ */
@@ -57,6 +61,53 @@ const injectRevealRuntime = (html: string) => {
     return html + REVEAL_RUNTIME_SCRIPT;
 };
 
+/* ----------------------- Caption Display Component -------------------------- */
+
+const CaptionDisplay = ({ chunks }: { chunks: CaptionChunk[] }) => {
+    const frame = useCurrentFrame();
+    const { fps } = useVideoConfig();
+    const time = frame / fps;
+
+    const currentCaption = useMemo(() => {
+        return chunks.find(
+            (chunk) => time >= chunk.timestamp[0] && time < chunk.timestamp[1]
+        );
+    }, [chunks, time]);
+
+    if (!currentCaption) return null;
+
+    return (
+        <div
+            style={{
+                position: "absolute",
+                bottom: 60,
+                left: 0,
+                right: 0,
+                display: "flex",
+                justifyContent: "center",
+                padding: "0 40px",
+                zIndex: 1000,
+            }}
+        >
+            <div
+                style={{
+                    backgroundColor: "rgba(0, 0, 0, 0.8)",
+                    color: "white",
+                    padding: "12px 24px",
+                    borderRadius: 8,
+                    fontSize: 24,
+                    fontFamily: "Arial, sans-serif",
+                    textAlign: "center",
+                    maxWidth: "80%",
+                    lineHeight: 1.4,
+                }}
+            >
+                {currentCaption.text}
+            </div>
+        </div>
+    );
+};
+
 /* ----------------------- Slide with reveal control -------------------------- */
 
 const SlideIFrameWithReveal = ({ slide }: { slide: Slide }) => {
@@ -68,28 +119,24 @@ const SlideIFrameWithReveal = ({ slide }: { slide: Slide }) => {
     const [ready, setReady] = React.useState(false);
 
     const revealPlan = useMemo(() => {
-        const ids = slide.revelData ?? [];
+        const ids = slide.revealData ?? []; // ✅ Fixed: revealData not revelData
         const chunks = slide.caption?.chunks ?? [];
         return ids.map((id, i) => ({
             id,
             at: chunks[i]?.timestamp?.[0] ?? 0,
         }));
-    }, [slide.revelData, slide.caption]);
+    }, [slide.revealData, slide.caption]); // ✅ Fixed dependency
 
-    // ✅ On load: mark ready + do a clean reset once
     const handleLoad = () => {
         setReady(true);
         iframeRef.current?.contentWindow?.postMessage({ type: "RESET" }, "*");
     };
 
-    // ✅ SCRUB-SAFE: Every render tick, ensure all items that should be visible are visible
     useEffect(() => {
         if (!ready) return;
         const win = iframeRef.current?.contentWindow;
         if (!win) return;
 
-        // If user scrubbed backward, we need to re-apply from scratch:
-        // simplest: RESET then re-REVEAL all steps up to "time"
         win.postMessage({ type: "RESET" }, "*");
 
         for (const step of revealPlan) {
@@ -103,12 +150,17 @@ const SlideIFrameWithReveal = ({ slide }: { slide: Slide }) => {
         <AbsoluteFill>
             <iframe
                 ref={iframeRef}
-                srcDoc={injectRevealRuntime(slide.html)}
+                srcDoc={injectRevealRuntime(slide.html || '')} // ✅ Handle null
                 onLoad={handleLoad}
                 sandbox="allow-scripts allow-same-origin"
                 style={{ width: 1280, height: 720, border: "none" }}
             />
-            <Audio src={slide.audioFileUrl} />
+            {slide.audioFileUrl && <Audio src={slide.audioFileUrl} />} // ✅ Conditional render
+            
+            {/* ✅ Display captions */}
+            {slide.caption?.chunks && (
+                <CaptionDisplay chunks={slide.caption.chunks} />
+            )}
         </AbsoluteFill>
     );
 };
@@ -119,6 +171,7 @@ type Props = {
     slides: Slide[];
     durationsBySlideId: Record<string, number>;
 }
+
 export const CourseComposition = ({ slides, durationsBySlideId }: Props) => {
     const { fps } = useVideoConfig();
 
@@ -132,13 +185,11 @@ export const CourseComposition = ({ slides, durationsBySlideId }: Props) => {
             const dur = durationsBySlideId[slide.slideId] ?? Math.ceil(6 * fps);
 
             const item = { slide, fromPosition, dur };
-
-            // ✅ after slide ends, wait 2s before next slide starts
             fromPosition += dur + GAP_FRAMES;
 
             return item;
         });
-    }, [slides, durationsBySlideId, fps,GAP_FRAMES]);
+    }, [slides, durationsBySlideId, fps, GAP_FRAMES]);
 
     return (
         <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -150,4 +201,3 @@ export const CourseComposition = ({ slides, durationsBySlideId }: Props) => {
         </AbsoluteFill>
     );
 };
-
