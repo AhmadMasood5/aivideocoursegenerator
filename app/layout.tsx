@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import {  DM_Sans} from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import {
   ClerkProvider,
@@ -9,9 +9,11 @@ import {
 import provider from "./provider";
 import Provider from "./provider";
 import { Toaster } from "@/components/ui/sonner";
-const AppFont = DM_Sans({
-  subsets: ["latin"],
-})
+const AppFont = localFont({
+  src: "../node_modules/@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2",
+  weight: "100 1000",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Create Next App",
