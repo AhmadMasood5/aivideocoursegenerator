@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/config/db";
+import { getDb } from "@/config/db";
 import { chapterContentSlides } from "@/config/schema";
 import type { chapterContentSlide, Caption } from "@/type/courseType";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
           ? slide.revealData
           : ["r1", "r2", "r3"]; // Default value
 
-        const result = await db
+        const result = await getDb()
           .insert(chapterContentSlides)
           .values({
             courseId,

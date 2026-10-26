@@ -1,10 +1,12 @@
-import { db } from "@/config/db";
-import { client } from "@/config/openai";
+import { getDb } from "@/config/db";
+import { getOpenAIClient } from "@/config/openai";
 import { coursesTable } from "@/config/schema";
 import { Course_config_prompt } from "@/data/promt";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
     try {
@@ -33,7 +35,7 @@ export async function POST(request: Request) {
         if (!hasPaidPlan) {
             console.log("⚠️ Free user - checking course limit...");
             
-            const userCourses = await db
+            const userCourses = await getDb()
                 .select()
                 .from(coursesTable)
                 .where(eq(coursesTable.userId, user.primaryEmailAddress.emailAddress));
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
         console.log("🤖 Calling Azure OpenAI...");
         console.log("Deployment:", process.env.AZURE_OPENAI_DEPLOYMENT_NAME);
         
-        const response = await client.chat.completions.create({
+        const response = await getOpenAIClient().chat.completions.create({
             model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME!,
             messages: [
                 {
@@ -155,7 +157,7 @@ Generate the course configuration now.`
         const finalCourseTitle = JsonResult.courseName || JsonResult.courseTitle;
 
         console.log("💾 Inserting into database...");
-        const courseResult = await db.insert(coursesTable).values({
+        const courseResult = await getDb().insert(coursesTable).values({
             courseId: courseId,
             courseName: finalCourseTitle,
             userInput: userInput,

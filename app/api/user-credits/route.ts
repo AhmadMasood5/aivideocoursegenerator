@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/config/db";
+import { getDb } from "@/config/db";
 import { usersTable } from "@/config/schema";
 import { eq } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +14,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
-    const user = await db
+    const user = await getDb()
       .select()
       .from(usersTable)
       .where(eq(usersTable.email, email))

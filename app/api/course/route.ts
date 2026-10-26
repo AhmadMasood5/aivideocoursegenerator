@@ -1,4 +1,4 @@
-import { db } from "@/config/db";
+import { getDb } from "@/config/db";
 import { chapterContentSlides, coursesTable } from "@/config/schema";
 import { eq, desc } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
       console.log('📥 Fetching all courses for user:', user.primaryEmailAddress.emailAddress);
       
-      const userCourses = await db
+      const userCourses = await getDb()
         .select()
         .from(coursesTable)
         .where(eq(coursesTable.userId, user.primaryEmailAddress.emailAddress))
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     console.log('📥 Requested courseId:', courseId);
 
     console.log('📥 Fetching course from database...');
-    const courses = await db
+    const courses = await getDb()
       .select()
       .from(coursesTable)
       .where(eq(coursesTable.courseId, courseId));
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     console.log('✓ Course found:', courses[0].courseName);
 
     console.log('📥 Fetching chapter content slides...');
-    const rawSlides = await db
+    const rawSlides = await getDb()
       .select()
       .from(chapterContentSlides)
       .where(eq(chapterContentSlides.courseId, courseId));

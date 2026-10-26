@@ -1,4 +1,4 @@
-import { client } from "@/config/openai";
+import { getOpenAIClient } from "@/config/openai";
 import { Generate_Video_Prompt } from "@/data/promt";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
@@ -89,7 +89,7 @@ async function generateWithRetry(messages: any[], maxRetries = 3) {
     try {
       console.log(`🤖 AI attempt ${attempt}/${maxRetries}...`);
 
-      const response = await client.chat.completions.create({
+      const response = await getOpenAIClient().chat.completions.create({
         model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME!,
         messages: messages,
         response_format: { type: "json_object" },
@@ -221,7 +221,7 @@ Now generate all ${subContent.length} slides with COMPLETE narration (50-60 word
       }
     ];
 
-    let aiResult = await generateWithRetry(messages);
+    const aiResult = await generateWithRetry(messages);
 
     // ✅ Improved fallback with proper character limits
     if (!aiResult) {
@@ -330,7 +330,7 @@ Now generate all ${subContent.length} slides with COMPLETE narration (50-60 word
       const slide = VideoContent[i] || {};
       const index = i + 1;
 
-      let originalNarration = slide.narration?.fullText || `This section covers ${topic}. We'll explore key concepts and practical applications. You'll learn important principles. These apply to real situations.`;
+      const originalNarration = slide.narration?.fullText || `This section covers ${topic}. We'll explore key concepts and practical applications. You'll learn important principles. These apply to real situations.`;
       
       // ✅ First validate and fix incomplete sentences
       const validatedNarration = validateAndFixNarration(originalNarration, topic);

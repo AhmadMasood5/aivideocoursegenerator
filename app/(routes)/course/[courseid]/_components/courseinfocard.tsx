@@ -75,7 +75,7 @@ function CourseInfoCard({ course, durationBySlideId }: Props) {
                 aspectRatio: "16/9",
               }}
               inputProps={{
-                //@ts-ignore
+                // @ts-expect-error Remotion Player prop typing mismatch
                 slides: slides,
                 durationsBySlideId: durationBySlideId ?? {},
               }}

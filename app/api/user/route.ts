@@ -1,12 +1,14 @@
-import { db } from "@/config/db";
+import { getDb } from "@/config/db";
 import { usersTable } from "@/config/schema";
 import { currentUser } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   const user = await currentUser();
-  const users = await db
+  const users = await getDb()
     .select()
     .from(usersTable)
     .where(
@@ -14,7 +16,7 @@ export async function POST(req: NextRequest) {
     );
 
     if(users.length ===0){
-        const newUser = await db.insert(usersTable).values({
+        const newUser = await getDb().insert(usersTable).values({
             email: user?.primaryEmailAddress?.emailAddress as string,
             name: user?.fullName as string,
         }).returning();

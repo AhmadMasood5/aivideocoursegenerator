@@ -155,7 +155,8 @@ const SlideIFrameWithReveal = ({ slide }: { slide: Slide }) => {
                 sandbox="allow-scripts allow-same-origin"
                 style={{ width: 1280, height: 720, border: "none" }}
             />
-            {slide.audioFileUrl && <Audio src={slide.audioFileUrl} />} // ✅ Conditional render
+            {slide.audioFileUrl && <Audio src={slide.audioFileUrl} />}
+            {/* ✅ Conditional render */}
             
             {/* ✅ Display captions */}
             {slide.caption?.chunks && (
@@ -179,16 +180,19 @@ export const CourseComposition = ({ slides, durationsBySlideId }: Props) => {
     const GAP_FRAMES = Math.round(GAP_SECONDS * fps);
 
     const timeline = useMemo(() => {
-        let fromPosition = 0;
+        return slides.reduce<{ slide: Slide; fromPosition: number; dur: number }[]>(
+            (timeline, slide) => {
+                const dur = durationsBySlideId[slide.slideId] ?? Math.ceil(6 * fps);
+                const previous = timeline[timeline.length - 1];
+                const fromPosition = previous
+                    ? previous.fromPosition + previous.dur + GAP_FRAMES
+                    : 0;
 
-        return slides.map((slide) => {
-            const dur = durationsBySlideId[slide.slideId] ?? Math.ceil(6 * fps);
-
-            const item = { slide, fromPosition, dur };
-            fromPosition += dur + GAP_FRAMES;
-
-            return item;
-        });
+                timeline.push({ slide, fromPosition, dur });
+                return timeline;
+            },
+            []
+        );
     }, [slides, durationsBySlideId, fps, GAP_FRAMES]);
 
     return (

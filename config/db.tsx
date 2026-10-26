@@ -1,7 +1,13 @@
 import { drizzle } from "drizzle-orm/neon-http"; // or neon-serverless depending on version
 import { neon } from "@neondatabase/serverless";
 
-const sql = neon(process.env.DATABASE_URL!);
+let database: ReturnType<typeof drizzle> | undefined;
 
-// This works: drizzle accepts the query function
-export const db = drizzle(sql);
+export function getDb() {
+  if (!database) {
+    const sql = neon(process.env.DATABASE_URL!);
+    database = drizzle(sql);
+  }
+
+  return database;
+}

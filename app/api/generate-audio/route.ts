@@ -8,9 +8,17 @@ import Replicate from "replicate";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_KEY || ''
-});
+let replicateClient: Replicate | undefined;
+
+function getReplicateClient() {
+  if (!replicateClient) {
+    replicateClient = new Replicate({
+      auth: process.env.REPLICATE_API_KEY || ''
+    });
+  }
+
+  return replicateClient;
+}
 
 // ✅ IMPROVED RATE LIMITING
 const RATE_LIMIT_DELAY = 15000; // 15 seconds between requests (increased from 12s)
@@ -243,7 +251,7 @@ const GenerateCaptionsWithRetry = async (audioUrl: string, attempt = 1): Promise
       batch_size: 64
     };
 
-    const output = await replicate.run(
+    const output = await getReplicateClient().run(
       "vaibhavs10/incredibly-fast-whisper:3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c",
       { input }
     );
