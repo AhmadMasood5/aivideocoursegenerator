@@ -5,8 +5,17 @@ import { Course_config_prompt } from "@/data/promt";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { parseAiJson } from "@/lib/parseAiJson";
 
 export const dynamic = "force-dynamic";
+
+interface CourseAiResult {
+    courseTitle?: string;
+    courseName?: string;
+    totalChapters?: number;
+    chapters?: unknown[];
+    [key: string]: unknown;
+}
 
 export async function POST(request: Request) {
     try {
@@ -118,9 +127,9 @@ Generate the course configuration now.`
             );
         }
 
-        let JsonResult;
+        let JsonResult: CourseAiResult;
         try {
-            JsonResult = JSON.parse(rawOutput);
+            JsonResult = parseAiJson<CourseAiResult>(rawOutput);
             console.log("✅ JSON parsed successfully");
             console.log("Course structure:", {
                 courseTitle: JsonResult.courseTitle,
@@ -154,7 +163,7 @@ Generate the course configuration now.`
         }
 
         // Use courseName (from updated prompt) or fallback to courseTitle
-        const finalCourseTitle = JsonResult.courseName || JsonResult.courseTitle;
+        const finalCourseTitle = JsonResult.courseName || JsonResult.courseTitle || "";
 
         console.log("💾 Inserting into database...");
         const courseResult = await getDb().insert(coursesTable).values({

@@ -2,9 +2,21 @@ import { getOpenAIClient } from "@/config/openai";
 import { Generate_Video_Prompt } from "@/data/promt";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { parseAiJson } from "@/lib/parseAiJson";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
+
+interface VideoSlide {
+  slideId?: string;
+  title?: string;
+  subtitle?: string;
+  audioFileName?: string;
+  narration?: { fullText?: string };
+  revelData?: string[];
+  revealData?: string[];
+  html?: string;
+}
 
 // ✅ NEW: Validate and fix incomplete narrations
 function validateAndFixNarration(text: string, topic: string): string {
@@ -114,7 +126,7 @@ async function generateWithRetry(messages: any[], maxRetries = 3) {
       }
 
       try {
-        const parsed = JSON.parse(aiResult.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim());
+        const parsed = parseAiJson<object>(aiResult);
         const slideCount = Object.keys(parsed).length;
         console.log(`✅ AI generated ${slideCount} slides successfully`);
         return aiResult;
@@ -282,15 +294,14 @@ Now generate all ${subContent.length} slides with COMPLETE narration (50-60 word
       return NextResponse.json(fallbackSlides);
     }
 
-    const cleanedContent = aiResult.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-    let VideoContent: Record<string, any>;
+    let VideoContent: Record<string, VideoSlide>;
     
     try {
-      VideoContent = JSON.parse(cleanedContent);
+      VideoContent = parseAiJson<Record<string, VideoSlide>>(aiResult);
       console.log(`✅ Successfully parsed ${Object.keys(VideoContent).length} slides`);
     } catch (parseError) {
       console.error('❌ JSON parse error:', parseError);
-      console.error('Raw content:', cleanedContent.substring(0, 500));
+      console.error('Raw content:', aiResult.substring(0, 500));
       console.warn("⚠️ Using fallback slides due to parse error.");
 
       const fallbackSlides: Record<string, any> = {};
